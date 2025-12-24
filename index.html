@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Interseção à Vante</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Tailwind via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- React -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Babel (para JSX direto no HTML) -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-gray-100">
+
+  <div id="root"></div>
+
+  <script type="text/babel">
+
+    const { useState } = React;
+    const { Calculator, FileText, Copy, Plus, Trash2 } = lucide;
+
+    /* ======= SEU COMPONENTE ======= */
+    const IntersecaoVanteRelatorio = () => {
+      const [pontos, setPontos] = useState([
+        {
+          id: 1,
+          nome: 'L2',
+          xA: '293109.076474',
+          yA: '9210945.891067',
+          nomeA: 'M0',
+          xB: '293189.109326',
+          yB: '9210923.173231',
+          nomeB: 'M1',
+          dhAP: '324.475278',
+          dhBP: '13.485000',
+          resultado: null
+        }
+      ]);
+
+      const [pontoAtivo, setPontoAtivo] = useState(0);
+
+      const adicionarPonto = () => {
+        const novo = {
+          ...pontos[pontoAtivo],
+          id: pontos.length + 1,
+          nome: `Ponto ${pontos.length + 1}`,
+          dhAP: '',
+          dhBP: '',
+          resultado: null
+        };
+        setPontos([...pontos, novo]);
+        setPontoAtivo(pontos.length);
+      };
+
+      const atualizarPonto = (campo, valor) => {
+        const novos = [...pontos];
+        novos[pontoAtivo][campo] = valor;
+        setPontos(novos);
+      };
+
+      const calcular = () => {
+        const p = pontos[pontoAtivo];
+
+        const xA = parseFloat(p.xA);
+        const yA = parseFloat(p.yA);
+        const xB = parseFloat(p.xB);
+        const yB = parseFloat(p.yB);
+        const dhAP = parseFloat(p.dhAP);
+        const dhBP = parseFloat(p.dhBP);
+
+        const dX = xB - xA;
+        const dY = yB - yA;
+
+        let azAB = Math.atan2(dX, dY) * 180 / Math.PI;
+        if (azAB < 0) azAB += 360;
+
+        const dAB = Math.sqrt(dX**2 + dY**2);
+
+        let azAP = (azAB + dhAP) % 360;
+        let azBA = (azAB + 180) % 360;
+        let azBP = (azBA + dhBP) % 360;
+
+        let angA = 360 - (azAP - azAB);
+        let angB = azBP - azBA;
+        let angP = 180 - angA - angB;
+
+        const dAP = dAB * Math.sin(angB * Math.PI/180) / Math.sin(angP * Math.PI/180);
+
+        const xP = xA + dAP * Math.sin(azAP * Math.PI/180);
+        const yP = yA + dAP * Math.cos(azAP * Math.PI/180);
+
+        const novos = [...pontos];
+        novos[pontoAtivo].resultado = { xP, yP, erro: 0 };
+        setPontos(novos);
+      };
+
+      const r = pontos[pontoAtivo].resultado;
+
+      return (
+        <div className="max-w-4xl mx-auto p-6 bg-white rounded shadow">
+          <h1 className="text-2xl font-bold mb-4 flex items-center gap-2">
+            <Calculator /> Interseção à Vante
+          </h1>
+
+          <div className="grid grid-cols-2 gap-4">
+            <input className="border p-2" value={pontos[pontoAtivo].xA} onChange={e=>atualizarPonto('xA', e.target.value)} placeholder="XA"/>
+            <input className="border p-2" value={pontos[pontoAtivo].yA} onChange={e=>atualizarPonto('yA', e.target.value)} placeholder="YA"/>
+            <input className="border p-2" value={pontos[pontoAtivo].xB} onChange={e=>atualizarPonto('xB', e.target.value)} placeholder="XB"/>
+            <input className="border p-2" value={pontos[pontoAtivo].yB} onChange={e=>atualizarPonto('yB', e.target.value)} placeholder="YB"/>
+            <input className="border p-2" value={pontos[pontoAtivo].dhAP} onChange={e=>atualizarPonto('dhAP', e.target.value)} placeholder="DH A→P"/>
+            <input className="border p-2" value={pontos[pontoAtivo].dhBP} onChange={e=>atualizarPonto('dhBP', e.target.value)} placeholder="DH B→P"/>
+          </div>
+
+          <button onClick={calcular} className="mt-4 bg-blue-600 text-white px-4 py-2 rounded">
+            Calcular
+          </button>
+
+          {r && (
+            <div className="mt-4 bg-green-50 p-4 rounded">
+              <strong>Resultado:</strong><br/>
+              X = {r.xP.toFixed(4)}<br/>
+              Y = {r.yP.toFixed(4)}
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    ReactDOM.createRoot(document.getElementById("root"))
+      .render(<IntersecaoVanteRelatorio />);
+
+  </script>
+
+</body>
+</html>
