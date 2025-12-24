@@ -74,6 +74,7 @@
            const calcular = () => {
     const p = pontos[pontoAtivo];
 
+    // Dados de entrada
     const xA = parseFloat(p.xA);
     const yA = parseFloat(p.yA);
     const xB = parseFloat(p.xB);
@@ -81,14 +82,17 @@
     const dhAP = parseFloat(p.dhAP);
     const dhBP = parseFloat(p.dhBP);
 
+    // Vetor AB
     const deltaX_AB = xB - xA;
     const deltaY_AB = yB - yA;
 
+    // Azimute AB
     let azAB = Math.atan2(deltaX_AB, deltaY_AB) * 180 / Math.PI;
     if (azAB < 0) azAB += 360;
 
-    const dAB = Math.sqrt(deltaX_AB**2 + deltaY_AB**2);
+    const dAB = Math.sqrt(deltaX_AB ** 2 + deltaY_AB ** 2);
 
+    // Azimutes das direções observadas
     let azAP = azAB + dhAP;
     if (azAP >= 360) azAP -= 360;
 
@@ -98,6 +102,7 @@
     let azBP = azBA + dhBP;
     if (azBP >= 360) azBP -= 360;
 
+    // Conversão para radianos
     const azAP_rad = azAP * Math.PI / 180;
     const azBP_rad = azBP * Math.PI / 180;
 
@@ -106,26 +111,43 @@
     const senB = Math.sin(azBP_rad);
     const cosB = Math.cos(azBP_rad);
 
+    // Interseção das retas
     const denom = (senA * cosB - cosA * senB);
 
     if (Math.abs(denom) < 1e-10) {
-        alert("As direções são praticamente paralelas. Interseção impossível.");
+        alert("Direções praticamente paralelas. Interseção impossível.");
         return;
     }
 
     const t = ((xB - xA) * cosB - (yB - yA) * senB) / denom;
-    const s = ((xB - xA) * cosA - (yB - yA) * senA) / denom;
 
-    const xP_A = xA + t * senA;
-    const yP_A = yA + t * cosA;
+    // Coordenadas do ponto P (interseção matemática)
+    const xP = xA + t * senA;
+    const yP = yA + t * cosA;
 
-    const xP_B = xB + s * senB;
-    const yP_B = yB + s * cosB;
+    // ==============================
+    // ERRO TOPOGRÁFICO (RESÍDUOS)
+    // ==============================
 
-    const erro_x = xP_A - xP_B;
-    const erro_y = yP_A - yP_B;
-    const erro_linear = Math.sqrt(erro_x**2 + erro_y**2);
+    // Equações gerais das retas
+    // reta A: aA*x + bA*y + cA = 0
+    const aA = cosA;
+    const bA = -senA;
+    const cA = -(aA * xA + bA * yA);
 
+    // reta B: aB*x + bB*y + cB = 0
+    const aB = cosB;
+    const bB = -senB;
+    const cB = -(aB * xB + bB * yB);
+
+    // Resíduos (distância ponto–reta)
+    const rA = Math.abs(aA * xP + bA * yP + cA) / Math.sqrt(aA ** 2 + bA ** 2);
+    const rB = Math.abs(aB * xP + bB * yP + cB) / Math.sqrt(aB ** 2 + bB ** 2);
+
+    // Erro linear topográfico
+    const erro_linear = Math.sqrt(rA ** 2 + rB ** 2);
+
+    // Resultado final
     const resultado = {
         deltaX_AB,
         deltaY_AB,
@@ -134,12 +156,10 @@
         azAP,
         azBA,
         azBP,
-        xP_A,
-        yP_A,
-        xP_B,
-        yP_B,
-        erro_x,
-        erro_y,
+        xP,
+        yP,
+        rA,
+        rB,
         erro_linear
     };
 
@@ -147,6 +167,7 @@
     novosPontos[pontoAtivo].resultado = resultado;
     setPontos(novosPontos);
 };
+
 
 
             const copiarRelatorio = () => {
