@@ -24,15 +24,15 @@
             const [pontos, setPontos] = useState([
                 {
                     id: 1,
-                    nome: null,
-                    xA: null,
-                    yA: null,
-                    nomeA: null,
-                    xB: null,
-                    yB: null,
-                    nomeB: null,
-                    dhAP: null,
-                    dhBP: null,
+                    nome: 'L2',
+                    xA: '293109.076474',
+                    yA: '9210945.891067',
+                    nomeA: 'M0',
+                    xB: '293189.109326',
+                    yB: '9210923.173231',
+                    nomeB: 'M1',
+                    dhAP: '324.475278',
+                    dhBP: '13.485000',
                     resultado: null
                 }
             ]);
@@ -122,7 +122,8 @@
 
                 const erro_x = xP_A - xP_B;
                 const erro_y = yP_A - yP_B;
-                const erro_linear = Math.sqrt(erro_x**2 + erro_y**2);
+                // Erro linear independente (RMS)
+                const erro_linear = Math.sqrt((erro_x**2 + erro_y**2) / 2);
 
                 const resultado = {
                     deltaX_AB, deltaY_AB,
