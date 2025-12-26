@@ -5,9 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Calculadora de Interseção à Vante - Topografia</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
         body { font-family: 'Inter', sans-serif; }
@@ -21,18 +18,6 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
     <script type="text/babel">
-        // Definição dos sistemas de coordenadas
-        proj4.defs(
-            "EPSG:31985",
-            "+proj=utm +zone=25 +south +datum=SIRGAS2000 +units=m +no_defs"
-        );
-
-        // Converte UTM 25S SIRGAS2000 → WGS84
-        function utm25ToWgs84(x, y) {
-            const [lon, lat] = proj4("EPSG:31985", "EPSG:4326", [x, y]);
-            return { lat, lon };
-        }
-
         const { useState } = React;
 
         const IntersecaoVanteRelatorio = () => {
@@ -53,47 +38,6 @@
             ]);
 
             const [pontoAtivo, setPontoAtivo] = useState(0);
-
-            // Componente do Mapa
-            const MapaTriangulo = ({ A, B, P, angA, angB, angP, nomeA, nomeB, nomeP }) => {
-                React.useEffect(() => {
-                    const map = L.map("mapa").setView([P.lat, P.lon], 19);
-
-                    L.tileLayer(
-                        "https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
-                        {
-                            subdomains: ["mt0", "mt1", "mt2", "mt3"],
-                            maxZoom: 22,
-                        }
-                    ).addTo(map);
-
-                    const pA = [A.lat, A.lon];
-                    const pB = [B.lat, B.lon];
-                    const pP = [P.lat, P.lon];
-
-                    L.marker(pA).addTo(map).bindPopup(`<b>Estação ${nomeA}</b><br/>X: ${A.x.toFixed(3)} m<br/>Y: ${A.y.toFixed(3)} m`);
-                    L.marker(pB).addTo(map).bindPopup(`<b>Estação ${nomeB}</b><br/>X: ${B.x.toFixed(3)} m<br/>Y: ${B.y.toFixed(3)} m`);
-                    L.marker(pP).addTo(map).bindPopup(`<b>Ponto ${nomeP}</b><br/>X: ${P.x.toFixed(3)} m<br/>Y: ${P.y.toFixed(3)} m`);
-
-                    L.polygon([pA, pB, pP], {
-                        color: "red",
-                        weight: 3,
-                        fillOpacity: 0.2,
-                    }).addTo(map).bindPopup(`
-                        <b>Triângulo ABP</b><br/>
-                        Ângulo em A: ${angA.toFixed(4)}°<br/>
-                        Ângulo em B: ${angB.toFixed(4)}°<br/>
-                        Ângulo em P: ${angP.toFixed(4)}°<br/>
-                        Soma: ${(angA + angB + angP).toFixed(4)}°
-                    `);
-
-                    return () => map.remove();
-                }, []);
-
-                return (
-                    <div id="mapa" className="w-full h-[500px] rounded-lg border mt-6" />
-                );
-            };
 
             const adicionarPonto = () => {
                 const novoPonto = {
@@ -127,6 +71,12 @@
                 setPontos(novosPontos);
             };
 
+            // Normaliza qualquer ângulo para o intervalo 0–360°
+            const normalizarAngulo = (angulo) => {
+                return ((angulo % 360) + 360) % 360;
+            };
+
+
             const calcular = () => {
                 const p = pontos[pontoAtivo];
                 
@@ -155,9 +105,13 @@
                 let azBP = azBA + dhBP;
                 if (azBP >= 360) azBP -= 360;
 
-                let angA = 360 - (azAP - azAB);
-                let angB = azBP - azBA;
+               // Ângulos internos do triângulo ABP (NORMALIZADOS)
+                let angA = normalizarAngulo(360 - (azAP - azAB));
+                let angB = normalizarAngulo(azBP - azBA);
+
+                // Ângulo em P fecha o triângulo
                 let angP = 180 - angA - angB;
+
 
                 const somaAngulos = angA + angB + angP;
 
@@ -530,35 +484,6 @@ Ponto ${p.nome}:  X = ${r.xP_A.toFixed(6)} m,  Y = ${r.yP_A.toFixed(6)} m
                                         <p>Y = {r.yP_A.toFixed(6)} m</p>
                                     </div>
                                     <p className="text-sm mt-2 opacity-90">Erro: {(r.erro_linear * 1000).toFixed(3)} mm</p>
-                                </div>
-
-                                {/* MAPA COM TRIÂNGULO */}
-                                <div className="p-4 bg-gray-50 rounded-lg">
-                                    <h3 className="font-bold text-gray-900 mb-3">📍 Visualização Geográfica</h3>
-                                    {(() => {
-                                        const xA = parseFloat(pontoAtual.xA);
-                                        const yA = parseFloat(pontoAtual.yA);
-                                        const xB = parseFloat(pontoAtual.xB);
-                                        const yB = parseFloat(pontoAtual.yB);
-
-                                        const A = { ...utm25ToWgs84(xA, yA), x: xA, y: yA };
-                                        const B = { ...utm25ToWgs84(xB, yB), x: xB, y: yB };
-                                        const P = { ...utm25ToWgs84(r.xP_A, r.yP_A), x: r.xP_A, y: r.yP_A };
-
-                                        return (
-                                            <MapaTriangulo
-                                                A={A}
-                                                B={B}
-                                                P={P}
-                                                angA={r.angA}
-                                                angB={r.angB}
-                                                angP={r.angP}
-                                                nomeA={pontoAtual.nomeA}
-                                                nomeB={pontoAtual.nomeB}
-                                                nomeP={pontoAtual.nome}
-                                            />
-                                        );
-                                    })()}
                                 </div>
                             </div>
                         )}
