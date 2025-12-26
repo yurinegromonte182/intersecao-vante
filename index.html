@@ -1,521 +1,202 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Calculadora de Interseção à Vante - Topografia</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-        body { font-family: 'Inter', sans-serif; }
-    </style>
+<meta charset="UTF-8" />
+<title>Interseção à Vante - Topografia</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+/>
+
+<style>
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+}
+#painel {
+  padding: 10px;
+  background: #f2f2f2;
+}
+input {
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 6px;
+}
+button {
+  width: 100%;
+  padding: 10px;
+  font-size: 16px;
+}
+#map {
+  height: 60vh;
+}
+.resultado {
+  font-size: 13px;
+  background: #fff;
+  padding: 8px;
+  margin-top: 6px;
+}
+</style>
 </head>
-<body class="bg-gray-50">
-    <div id="root"></div>
 
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<body>
 
-    <script type="text/babel">
-        const { useState } = React;
+<div id="painel">
+  <h3>Interseção à Vante</h3>
 
-        const IntersecaoVanteRelatorio = () => {
-            const [pontos, setPontos] = useState([
-                {
-                    id: 1,
-                    nome: 'L2',
-                    xA: '293109.076474',
-                    yA: '9210945.891067',
-                    nomeA: 'M0',
-                    xB: '293189.109326',
-                    yB: '9210923.173231',
-                    nomeB: 'M1',
-                    dhAP: '324.475278',
-                    dhBP: '13.485000',
-                    resultado: null
-                }
-            ]);
+  <b>Ponto A (UTM 25S)</b>
+  <input id="xA" placeholder="Easting A">
+  <input id="yA" placeholder="Northing A">
 
-            const [pontoAtivo, setPontoAtivo] = useState(0);
+  <b>Ponto B (UTM 25S)</b>
+  <input id="xB" placeholder="Easting B">
+  <input id="yB" placeholder="Northing B">
 
-            const adicionarPonto = () => {
-                const novoPonto = {
-                    id: pontos.length + 1,
-                    nome: `Ponto ${pontos.length + 1}`,
-                    xA: pontos[pontoAtivo].xA,
-                    yA: pontos[pontoAtivo].yA,
-                    nomeA: pontos[pontoAtivo].nomeA,
-                    xB: pontos[pontoAtivo].xB,
-                    yB: pontos[pontoAtivo].yB,
-                    nomeB: pontos[pontoAtivo].nomeB,
-                    dhAP: '',
-                    dhBP: '',
-                    resultado: null
-                };
-                setPontos([...pontos, novoPonto]);
-                setPontoAtivo(pontos.length);
-            };
+  <b>Direções Horizontais</b>
+  <input id="dhAP" placeholder="DH A→P (graus)">
+  <input id="dhBP" placeholder="DH B→P (graus)">
 
-            const removerPonto = (index) => {
-                if (pontos.length > 1) {
-                    const novosPontos = pontos.filter((_, i) => i !== index);
-                    setPontos(novosPontos);
-                    setPontoAtivo(Math.max(0, index - 1));
-                }
-            };
+  <button onclick="calcular()">Calcular</button>
 
-            const atualizarPonto = (campo, valor) => {
-                const novosPontos = [...pontos];
-                novosPontos[pontoAtivo][campo] = valor;
-                setPontos(novosPontos);
-            };
+  <div id="saida" class="resultado"></div>
+</div>
 
-            // Normaliza qualquer ângulo para o intervalo 0–360°
-            const normalizarAngulo = (angulo) => {
-                return ((angulo % 360) + 360) % 360;
-            };
+<div id="map"></div>
 
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-            const calcular = () => {
-                const p = pontos[pontoAtivo];
-                
-                const xA = parseFloat(p.xA);
-                const yA = parseFloat(p.yA);
-                const xB = parseFloat(p.xB);
-                const yB = parseFloat(p.yB);
-                const dhAP = parseFloat(p.dhAP);
-                const dhBP = parseFloat(p.dhBP);
+<script>
+// ================= FUNÇÕES =================
 
-                const deltaX_AB = xB - xA;
-                const deltaY_AB = yB - yA;
+const normalizar360 = a => ((a % 360) + 360) % 360;
 
-                let azAB_rad = Math.atan2(deltaX_AB, deltaY_AB);
-                let azAB = azAB_rad * (180 / Math.PI);
-                if (azAB < 0) azAB += 360;
+const normalizar180 = a => {
+  a = normalizar360(a);
+  return a > 180 ? 360 - a : a;
+};
 
-                const dAB = Math.sqrt(deltaX_AB**2 + deltaY_AB**2);
+// UTM 25S → WGS84
+const utm25SParaLatLon = (E, N) => {
+  const a = 6378137;
+  const f = 1 / 298.257223563;
+  const k0 = 0.9996;
+  const e = Math.sqrt(f * (2 - f));
+  const e1sq = e * e / (1 - e * e);
+  const lon0 = -33 * Math.PI / 180;
 
-                let azAP = azAB + dhAP;
-                if (azAP >= 360) azAP -= 360;
+  let x = E - 500000;
+  let y = N - 10000000;
 
-                let azBA = azAB + 180;
-                if (azBA >= 360) azBA -= 360;
+  const M = y / k0;
+  const mu = M / (a * (1 - e*e/4 - 3*e**4/64 - 5*e**6/256));
 
-                let azBP = azBA + dhBP;
-                if (azBP >= 360) azBP -= 360;
+  const phi1 =
+    mu +
+    (3*e1sq/2 - 27*e1sq**3/32)*Math.sin(2*mu) +
+    (21*e1sq**2/16 - 55*e1sq**4/32)*Math.sin(4*mu) +
+    (151*e1sq**3/96)*Math.sin(6*mu);
 
-               // Ângulos internos do triângulo ABP (NORMALIZADOS)
-                let angA = normalizarAngulo(360 - (azAP - azAB));
-                let angB = normalizarAngulo(azBP - azBA);
+  const N1 = a / Math.sqrt(1 - e*e*Math.sin(phi1)**2);
+  const T1 = Math.tan(phi1)**2;
+  const C1 = e1sq * Math.cos(phi1)**2;
+  const R1 = a*(1-e*e) / Math.pow(1-e*e*Math.sin(phi1)**2,1.5);
+  const D = x/(N1*k0);
 
-                // Ângulo em P fecha o triângulo
-                let angP = 180 - angA - angB;
+  const lat =
+    phi1 -
+    (N1*Math.tan(phi1)/R1) *
+    (D**2/2 -
+     (5+3*T1+10*C1-4*C1**2-9*e1sq)*D**4/24);
 
+  const lon =
+    lon0 +
+    (D -
+     (1+2*T1+C1)*D**3/6)/Math.cos(phi1);
 
-                const somaAngulos = angA + angB + angP;
+  return {
+    lat: lat * 180 / Math.PI,
+    lon: lon * 180 / Math.PI
+  };
+};
 
-                const angA_rad = angA * Math.PI / 180;
-                const angB_rad = angB * Math.PI / 180;
-                const angP_rad = angP * Math.PI / 180;
+// ================= MAPA =================
 
-                const dAP = dAB * Math.sin(angB_rad) / Math.sin(angP_rad);
-                const dBP = dAB * Math.sin(angA_rad) / Math.sin(angP_rad);
+const map = L.map('map').setView([-8, -35], 15);
+L.tileLayer(
+  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+  { maxZoom: 20 }
+).addTo(map);
 
-                const azAP_rad = azAP * Math.PI / 180;
-                const xP_A = xA + dAP * Math.sin(azAP_rad);
-                const yP_A = yA + dAP * Math.cos(azAP_rad);
+let camada;
 
-                const azBP_rad = azBP * Math.PI / 180;
-                const xP_B = xB + dBP * Math.sin(azBP_rad);
-                const yP_B = yB + dBP * Math.cos(azBP_rad);
+// ================= CÁLCULO =================
 
-                const erro_x = xP_A - xP_B;
-                const erro_y = yP_A - yP_B;
-                // Erro linear independente (RMS)
-                const erro_linear = Math.sqrt((erro_x**2 + erro_y**2) / 2);
+function calcular() {
+  if (camada) camada.remove();
 
-                const resultado = {
-                    deltaX_AB, deltaY_AB,
-                    azAB, dAB,
-                    azAP, azBA, azBP,
-                    angA, angB, angP, somaAngulos,
-                    dAP, dBP,
-                    xP_A, yP_A, xP_B, yP_B,
-                    erro_x, erro_y, erro_linear
-                };
+  const xA = +xAInput.value;
+  const yA = +yAInput.value;
+  const xB = +xBInput.value;
+  const yB = +yBInput.value;
+  const dhAP = +dhAPInput.value;
+  const dhBP = +dhBPInput.value;
 
-                const novosPontos = [...pontos];
-                novosPontos[pontoAtivo].resultado = resultado;
-                setPontos(novosPontos);
-            };
+  const dX = xB - xA;
+  const dY = yB - yA;
 
-            const copiarRelatorio = () => {
-                const p = pontos[pontoAtivo];
-                const r = p.resultado;
-                
-                const texto = `RELATÓRIO TÉCNICO - INTERSEÇÃO À VANTE
-Ponto: ${p.nome}
-═══════════════════════════════════════════════════════════
+  const azAB = normalizar360(Math.atan2(dX, dY) * 180 / Math.PI);
+  const dAB = Math.hypot(dX, dY);
 
-1. DADOS DE ENTRADA
-────────────────────────────────────────────────────────────
-Estação A (${p.nomeA}):  X = ${p.xA} m,  Y = ${p.yA} m
-Estação B (${p.nomeB}):  X = ${p.xB} m,  Y = ${p.yB} m
-Direção Horizontal A→P: ${p.dhAP}°
-Direção Horizontal B→P: ${p.dhBP}°
+  const azAP = normalizar360(azAB + dhAP);
+  const azBA = normalizar360(azAB + 180);
+  const azBP = normalizar360(azBA + dhBP);
 
-2. CÁLCULO DE AZIMUTE E DISTÂNCIA AB
-────────────────────────────────────────────────────────────
-ΔX_AB = ${r.deltaX_AB.toFixed(6)} m
-ΔY_AB = ${r.deltaY_AB.toFixed(6)} m
-Az_AB = ${r.azAB.toFixed(6)}°
-Distância AB = ${r.dAB.toFixed(6)} m
+  const angA = normalizar180(azAB - azAP);
+  const angB = normalizar180(azBP - azBA);
+  const angP = 180 - angA - angB;
 
-3. AZIMUTES PARA O PONTO P
-────────────────────────────────────────────────────────────
-Az_AP = Az_AB + DH_A = ${r.azAP.toFixed(6)}°
-Az_BA = Az_AB + 180° = ${r.azBA.toFixed(6)}°
-Az_BP = Az_BA + DH_B = ${r.azBP.toFixed(6)}°
+  const dAP = dAB * Math.sin(angB * Math.PI/180) / Math.sin(angP * Math.PI/180);
 
-4. ÂNGULOS INTERNOS DO TRIÂNGULO
-────────────────────────────────────────────────────────────
-Ângulo em A = ${r.angA.toFixed(6)}°
-Ângulo em B = ${r.angB.toFixed(6)}°
-Ângulo em P = ${r.angP.toFixed(6)}°
-Soma = ${r.somaAngulos.toFixed(6)}° (deve ser 180°)
+  const xP = xA + dAP * Math.sin(azAP * Math.PI/180);
+  const yP = yA + dAP * Math.cos(azAP * Math.PI/180);
 
-5. DISTÂNCIAS (LEI DOS SENOS)
-────────────────────────────────────────────────────────────
-Distância AP = ${r.dAP.toFixed(6)} m
-Distância BP = ${r.dBP.toFixed(6)} m
+  const A = utm25SParaLatLon(xA, yA);
+  const B = utm25SParaLatLon(xB, yB);
+  const P = utm25SParaLatLon(xP, yP);
 
-6. COORDENADAS DO PONTO P
-────────────────────────────────────────────────────────────
-Calculado de A:  X = ${r.xP_A.toFixed(6)} m,  Y = ${r.yP_A.toFixed(6)} m
-Calculado de B:  X = ${r.xP_B.toFixed(6)} m,  Y = ${r.yP_B.toFixed(6)} m
+  camada = L.layerGroup([
+    L.marker([A.lat, A.lon]).bindPopup("A"),
+    L.marker([B.lat, B.lon]).bindPopup("B"),
+    L.marker([P.lat, P.lon]).bindPopup("P"),
+    L.polygon([[A.lat,A.lon],[B.lat,B.lon],[P.lat,P.lon]])
+  ]).addTo(map);
 
-7. ERRO DE FECHAMENTO
-────────────────────────────────────────────────────────────
-ΔX = ${r.erro_x.toFixed(6)} m
-ΔY = ${r.erro_y.toFixed(6)} m
-Erro Linear = ${r.erro_linear.toFixed(6)} m = ${(r.erro_linear * 1000).toFixed(3)} mm
+  map.fitBounds(camada.getBounds());
 
-8. RESULTADO FINAL
-────────────────────────────────────────────────────────────
-Ponto ${p.nome}:  X = ${r.xP_A.toFixed(6)} m,  Y = ${r.yP_A.toFixed(6)} m
-═══════════════════════════════════════════════════════════`;
-                
-                navigator.clipboard.writeText(texto);
-                alert('Relatório copiado para a área de transferência!');
-            };
+  saida.innerHTML = `
+  <b>Azimutes</b><br>
+  AB: ${azAB.toFixed(6)}°<br>
+  AP: ${azAP.toFixed(6)}°<br>
+  BP: ${azBP.toFixed(6)}°<br><br>
 
-            const pontoAtual = pontos[pontoAtivo];
-            const r = pontoAtual?.resultado;
+  <b>Ângulos Internos</b><br>
+  A: ${angA.toFixed(6)}°<br>
+  B: ${angB.toFixed(6)}°<br>
+  P: ${angP.toFixed(6)}°<br>
+  `;
+}
 
-            return (
-                <div className="max-w-7xl mx-auto p-6 bg-gray-50 min-h-screen">
-                    <div className="bg-white rounded-lg shadow-lg p-6">
-                        <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
-                            <div className="flex items-center gap-3">
-                                <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                                </svg>
-                                <h1 className="text-2xl font-bold text-gray-800">
-                                    Interseção à Vante - Metodologia Completa
-                                </h1>
-                            </div>
-                            <button
-                                onClick={adicionarPonto}
-                                className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
-                            >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                                </svg>
-                                Novo Ponto
-                            </button>
-                        </div>
+// inputs
+const xAInput = document.getElementById('xA');
+const yAInput = document.getElementById('yA');
+const xBInput = document.getElementById('xB');
+const yBInput = document.getElementById('yB');
+const dhAPInput = document.getElementById('dhAP');
+const dhBPInput = document.getElementById('dhBP');
+const saida = document.getElementById('saida');
+</script>
 
-                        {/* Abas de pontos */}
-                        <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
-                            {pontos.map((ponto, index) => (
-                                <div key={ponto.id} className="flex items-center gap-1">
-                                    <button
-                                        onClick={() => setPontoAtivo(index)}
-                                        className={`px-4 py-2 rounded-t-lg font-medium transition ${
-                                            pontoAtivo === index
-                                                ? 'bg-blue-600 text-white'
-                                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                                        }`}
-                                    >
-                                        {ponto.nome}
-                                    </button>
-                                    {pontos.length > 1 && (
-                                        <button
-                                            onClick={() => removerPonto(index)}
-                                            className="p-1 text-red-600 hover:bg-red-100 rounded"
-                                        >
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                            </svg>
-                                        </button>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-
-                        {/* Formulário de entrada */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                            {/* Identificação */}
-                            <div className="md:col-span-2 bg-purple-50 p-4 rounded-lg">
-                                <h3 className="font-bold text-purple-900 mb-3">Identificação do Ponto</h3>
-                                <input
-                                    type="text"
-                                    value={pontoAtual.nome}
-                                    onChange={(e) => atualizarPonto('nome', e.target.value)}
-                                    className="w-full p-2 border rounded"
-                                    placeholder="Nome do ponto (ex: L2, P1, etc.)"
-                                />
-                            </div>
-
-                            {/* Estação A */}
-                            <div className="bg-blue-50 p-4 rounded-lg">
-                                <h3 className="font-bold text-blue-900 mb-3">Estação A</h3>
-                                <div className="space-y-2">
-                                    <div>
-                                        <label className="block text-sm font-medium mb-1">Nome</label>
-                                        <input
-                                            type="text"
-                                            value={pontoAtual.nomeA}
-                                            onChange={(e) => atualizarPonto('nomeA', e.target.value)}
-                                            className="w-full p-2 border rounded"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium mb-1">X (m)</label>
-                                        <input
-                                            type="text"
-                                            value={pontoAtual.xA}
-                                            onChange={(e) => atualizarPonto('xA', e.target.value)}
-                                            className="w-full p-2 border rounded"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium mb-1">Y (m)</label>
-                                        <input
-                                            type="text"
-                                            value={pontoAtual.yA}
-                                            onChange={(e) => atualizarPonto('yA', e.target.value)}
-                                            className="w-full p-2 border rounded"
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Estação B */}
-                            <div className="bg-green-50 p-4 rounded-lg">
-                                <h3 className="font-bold text-green-900 mb-3">Estação B</h3>
-                                <div className="space-y-2">
-                                    <div>
-                                        <label className="block text-sm font-medium mb-1">Nome</label>
-                                        <input
-                                            type="text"
-                                            value={pontoAtual.nomeB}
-                                            onChange={(e) => atualizarPonto('nomeB', e.target.value)}
-                                            className="w-full p-2 border rounded"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium mb-1">X (m)</label>
-                                        <input
-                                            type="text"
-                                            value={pontoAtual.xB}
-                                            onChange={(e) => atualizarPonto('xB', e.target.value)}
-                                            className="w-full p-2 border rounded"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium mb-1">Y (m)</label>
-                                        <input
-                                            type="text"
-                                            value={pontoAtual.yB}
-                                            onChange={(e) => atualizarPonto('yB', e.target.value)}
-                                            className="w-full p-2 border rounded"
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Direções Horizontais */}
-                            <div className="md:col-span-2 bg-yellow-50 p-4 rounded-lg">
-                                <h3 className="font-bold text-yellow-900 mb-3">Direções Horizontais Observadas (graus decimais)</h3>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-sm font-medium mb-1">DH de A para P (°)</label>
-                                        <input
-                                            type="text"
-                                            value={pontoAtual.dhAP}
-                                            onChange={(e) => atualizarPonto('dhAP', e.target.value)}
-                                            className="w-full p-2 border rounded"
-                                            placeholder="324.475278"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium mb-1">DH de B para P (°)</label>
-                                        <input
-                                            type="text"
-                                            value={pontoAtual.dhBP}
-                                            onChange={(e) => atualizarPonto('dhBP', e.target.value)}
-                                            className="w-full p-2 border rounded"
-                                            placeholder="13.485000"
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <button
-                            onClick={calcular}
-                            className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition mb-6"
-                        >
-                            CALCULAR COORDENADAS
-                        </button>
-
-                        {/* Resultados */}
-                        {r && (
-                            <div className="space-y-4">
-                                <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
-                                    <h2 className="text-xl font-bold text-gray-800">Relatório Técnico</h2>
-                                    <button
-                                        onClick={copiarRelatorio}
-                                        className="flex items-center gap-2 bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700"
-                                    >
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                        </svg>
-                                        Copiar Relatório
-                                    </button>
-                                </div>
-
-                                {/* Passo 3 */}
-                                <div className="p-4 bg-blue-50 rounded-lg">
-                                    <h3 className="font-bold text-blue-900 mb-2">PASSO 3: Azimute e Distância entre A e B</h3>
-                                    <div className="grid grid-cols-2 gap-4 text-sm">
-                                        <div><span className="font-medium">ΔX_AB:</span> {r.deltaX_AB.toFixed(6)} m</div>
-                                        <div><span className="font-medium">ΔY_AB:</span> {r.deltaY_AB.toFixed(6)} m</div>
-                                        <div><span className="font-medium">Az_AB:</span> {r.azAB.toFixed(6)}°</div>
-                                        <div><span className="font-medium">Distância AB:</span> {r.dAB.toFixed(6)} m</div>
-                                    </div>
-                                </div>
-
-                                {/* Passo 4 */}
-                                <div className="p-4 bg-green-50 rounded-lg">
-                                    <h3 className="font-bold text-green-900 mb-2">PASSO 4: Azimutes para o Ponto P</h3>
-                                    <div className="grid grid-cols-3 gap-4 text-sm">
-                                        <div><span className="font-medium">Az_AP:</span> {r.azAP.toFixed(6)}°</div>
-                                        <div><span className="font-medium">Az_BA:</span> {r.azBA.toFixed(6)}°</div>
-                                        <div><span className="font-medium">Az_BP:</span> {r.azBP.toFixed(6)}°</div>
-                                    </div>
-                                </div>
-
-                                {/* Passo 5 */}
-                                <div className="p-4 bg-yellow-50 rounded-lg">
-                                    <h3 className="font-bold text-yellow-900 mb-2">PASSO 5: Ângulos Internos do Triângulo</h3>
-                                    <div className="grid grid-cols-2 gap-4 text-sm">
-                                        <div><span className="font-medium">Ângulo em A:</span> {r.angA.toFixed(6)}°</div>
-                                        <div><span className="font-medium">Ângulo em B:</span> {r.angB.toFixed(6)}°</div>
-                                        <div><span className="font-medium">Ângulo em P:</span> {r.angP.toFixed(6)}°</div>
-                                        <div><span className="font-medium">Soma:</span> {r.somaAngulos.toFixed(6)}°</div>
-                                    </div>
-                                </div>
-
-                                {/* Passo 6 */}
-                                <div className="p-4 bg-purple-50 rounded-lg">
-                                    <h3 className="font-bold text-purple-900 mb-2">PASSO 6: Distâncias (Lei dos Senos)</h3>
-                                    <div className="grid grid-cols-2 gap-4 text-sm">
-                                        <div><span className="font-medium">Distância AP:</span> {r.dAP.toFixed(6)} m</div>
-                                        <div><span className="font-medium">Distância BP:</span> {r.dBP.toFixed(6)} m</div>
-                                    </div>
-                                </div>
-
-                                {/* Passo 7 */}
-                                <div className="p-4 bg-red-50 rounded-lg border-2 border-red-300">
-                                    <h3 className="font-bold text-red-900 mb-2">PASSO 7: COORDENADAS DO PONTO P</h3>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div className="bg-white p-3 rounded">
-                                            <p className="text-sm font-medium mb-1">Calculado de A:</p>
-                                            <p className="text-lg font-bold text-blue-600">X = {r.xP_A.toFixed(6)} m</p>
-                                            <p className="text-lg font-bold text-blue-600">Y = {r.yP_A.toFixed(6)} m</p>
-                                        </div>
-                                        <div className="bg-white p-3 rounded">
-                                            <p className="text-sm font-medium mb-1">Verificação de B:</p>
-                                            <p className="text-lg font-bold text-green-600">X = {r.xP_B.toFixed(6)} m</p>
-                                            <p className="text-lg font-bold text-green-600">Y = {r.yP_B.toFixed(6)} m</p>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Erro */}
-                                <div className="p-4 bg-gray-100 rounded-lg">
-                                    <h3 className="font-bold text-gray-900 mb-2">Erro de Fechamento</h3>
-                                    <div className="grid grid-cols-3 gap-4 text-sm">
-                                        <div>
-                                            <span className="font-medium">ΔX:</span> {r.erro_x.toFixed(6)} m
-                                            <br/><span className="text-xs">({(r.erro_x * 1000).toFixed(3)} mm)</span>
-                                        </div>
-                                        <div>
-                                            <span className="font-medium">ΔY:</span> {r.erro_y.toFixed(6)} m
-                                            <br/><span className="text-xs">({(r.erro_y * 1000).toFixed(3)} mm)</span>
-                                        </div>
-                                        <div>
-                                            <span className="font-medium">Erro Linear:</span> {r.erro_linear.toFixed(6)} m
-                                            <br/><span className={`text-xs font-bold ${r.erro_linear < 0.001 ? 'text-green-600' : r.erro_linear < 0.01 ? 'text-yellow-600' : 'text-red-600'}`}>
-                                                ({(r.erro_linear * 1000).toFixed(3)} mm)
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Resultado Final */}
-                                <div className="p-6 bg-gradient-to-r from-blue-600 to-blue-800 text-white rounded-lg">
-                                    <h3 className="font-bold text-xl mb-3">RESULTADO FINAL - Ponto {pontoAtual.nome}</h3>
-                                    <div className="text-2xl font-bold">
-                                        <p>X = {r.xP_A.toFixed(6)} m</p>
-                                        <p>Y = {r.yP_A.toFixed(6)} m</p>
-                                    </div>
-                                    <p className="text-sm mt-2 opacity-90">Erro: {(r.erro_linear * 1000).toFixed(3)} mm</p>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Metodologia */}
-                        <div className="mt-8 p-4 bg-gray-100 rounded-lg text-sm">
-                            <h3 className="font-bold mb-2">📋 Metodologia - Interseção à Vante</h3>
-                            <p className="mb-2">Esta calculadora segue a metodologia do relatório técnico:</p>
-                            <ol className="list-decimal list-inside space-y-1 text-gray-700">
-                                <li>Entrada de coordenadas das estações A e B conhecidas</li>
-                                <li>Entrada das direções horizontais observadas (em graus decimais)</li>
-                                <li>Cálculo do azimute e distância entre A e B</li>
-                                <li>Cálculo dos azimutes A→P e B→P</li>
-                                <li>Determinação dos ângulos internos do triângulo ABP</li>
-                                <li>Aplicação da Lei dos Senos para distâncias AP e BP</li>
-                                <li>Cálculo das coordenadas de P usando ambas estações</li>
-                                <li>Verificação do erro de fechamento</li>
-                            </ol>
-                        </div>
-
-                        {/* Footer */}
-                        <div className="mt-8 pt-6 border-t text-center text-sm text-gray-600">
-                            <p>Calculadora de Interseção à Vante - Topografia para Engenharia</p>
-                            <p className="mt-1">Desenvolvido para levantamentos topográficos de precisão</p>
-                        </div>
-                    </div>
-                </div>
-            );
-        };
-
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<IntersecaoVanteRelatorio />);
-    </script>
 </body>
 </html>
