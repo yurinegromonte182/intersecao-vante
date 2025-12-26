@@ -71,6 +71,12 @@
                 setPontos(novosPontos);
             };
 
+            // Normaliza qualquer ângulo para o intervalo 0–360°
+            const normalizarAngulo = (angulo) => {
+                return ((angulo % 360) + 360) % 360;
+            };
+
+
             const calcular = () => {
                 const p = pontos[pontoAtivo];
                 
@@ -99,9 +105,13 @@
                 let azBP = azBA + dhBP;
                 if (azBP >= 360) azBP -= 360;
 
-                let angA = 360 - (azAP - azAB);
-                let angB = azBP - azBA;
+               // Ângulos internos do triângulo ABP (NORMALIZADOS)
+                let angA = normalizarAngulo(360 - (azAP - azAB));
+                let angB = normalizarAngulo(azBP - azBA);
+
+                // Ângulo em P fecha o triângulo
                 let angP = 180 - angA - angB;
+
 
                 const somaAngulos = angA + angB + angP;
 
